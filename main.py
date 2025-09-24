@@ -87,7 +87,7 @@ class ChargeStationPlugin(Star):
         area = parts[2] if len(parts) > 2 else None
 
         # 缓存 key
-        cache_key = (campus, area)
+        cache_key = (campus or "all", area or "all")
         now = time.time()
         cache_entry = self.cache.get(cache_key)
 
