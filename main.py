@@ -1,4 +1,5 @@
 import json
+import os
 import aiohttp
 import time
 from astrbot.api import logger
@@ -9,11 +10,23 @@ from astrbot.api.event import filter, AstrMessageEvent
 class ChargeStationPlugin(Star):
     def __init__(self, context: Context, config=None):
         super().__init__(context)
-        self.config = config or {}
-        self.device_map = self.config.get("device_map", {})
-
+        self.data_dir = os.path.dirname(__file__)
+        self.device_map_path = os.path.join(self.data_dir, "device_map.json")
+        self.device_map = self._load_device_map()
         # 全局缓存 (所有用户共用)
         self.cache = {}
+
+    def _load_device_map(self):
+        """从 device_map.json 读取设备映射表"""
+        if not os.path.exists(self.device_map_path):
+            logger.warning(f"[ChargeStationPlugin] device_map.json 不存在：{self.device_map_path}")
+            return {}
+        try:
+            with open(self.device_map_path, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception as e:
+            logger.error(f"[ChargeStationPlugin] 读取 device_map.json 失败: {e}")
+            return {}
 
     def _get_campus_areas(self, campus=None):
         """获取校区下的所有区域列表"""
