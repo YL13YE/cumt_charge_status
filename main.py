@@ -92,7 +92,7 @@ class ChargeStationPlugin(Star):
         cache_entry = self.cache.get(cache_key)
 
         if cache_entry and now - cache_entry["time"] < 60:
-            event.plain_result(f"(缓存数据，{int(now - cache_entry['time'])}秒前更新)\n{cache_entry['reply']}")
+            yield event.plain_result(f"(缓存数据，{int(now - cache_entry['time'])}秒前更新)\n{cache_entry['reply']}")
             return
 
         # 获取需要查询的 device_ids
@@ -105,15 +105,15 @@ class ChargeStationPlugin(Star):
                 device_ids.extend(devices.keys())
 
         if not device_ids:
-            event.plain_result("未找到设备，请检查校区或区域名称")
+            yield event.plain_result("未找到设备，请检查校区或区域名称")
             return
 
         data = await self._fetch_ports_data(device_ids)
         if not data:
-            event.plain_result("获取充电桩信息失败")
+            yield event.plain_result("获取充电桩信息失败")
             return
         if data.get("code") != 100000:
-            event.plain_result("接口返回错误")
+            yield event.plain_result("接口返回错误")
             return
 
         ports_data = data.get("data", {})
@@ -122,13 +122,13 @@ class ChargeStationPlugin(Star):
         # 更新缓存
         self.cache[cache_key] = {"time": now, "ports_data": ports_data, "reply": reply}
 
-        event.plain_result(reply)
+        yield event.plain_result(reply)
 
     @filter.command("charge_refresh")
     async def refresh_cache(self, event: AstrMessageEvent):
         """强制刷新缓存，获取最新信息"""
         self.cache.clear()
-        event.plain_result("✅ 缓存已清空，下次查询将强制获取最新数据")
+        yield event.plain_result("✅ 缓存已清空，下次查询将强制获取最新数据")
 
     @filter.command("charge_list")
     async def list_areas(self, event: AstrMessageEvent):
@@ -139,19 +139,19 @@ class ChargeStationPlugin(Star):
         if len(parts) < 2:
             campuses = list(self.device_map.keys())
             if not campuses:
-                event.plain_result("⚠️ 未配置任何校区")
+                yield event.plain_result("⚠️ 未配置任何校区")
                 return
 
             reply = "🏫 可用校区列表：\n" + "\n".join(f"  - {campus}" for campus in campuses)
 
-            event.plain_result(reply)
+            yield event.plain_result(reply)
             return
 
         campus = parts[1]
         areas = self._get_campus_areas(campus)
 
         if not areas:
-            event.plain_result(f"⚠️ 校区「{campus}」不存在或未配置区域")
+            yield event.plain_result(f"⚠️ 校区「{campus}」不存在或未配置区域")
             return
 
         max_len = max(len(a) for a in areas)
@@ -161,7 +161,7 @@ class ChargeStationPlugin(Star):
             area_stats.append(f"  {area_name.ljust(max_len)} | {device_count:>2} 个设备")
 
         reply = f"📍 校区「{campus}」的区域列表：\n" + "\n".join(area_stats)
-        event.plain_result(reply)
+        yield event.plain_result(reply)
 
     @filter.command("charge_help")
     async def charge_help(self, event: AstrMessageEvent):
@@ -175,7 +175,7 @@ class ChargeStationPlugin(Star):
             "/charge_refresh          强制清空缓存，下次查询获取最新数据\n"
             "/charge_help             显示帮助信息\n"
         )
-        event.plain_result(help_msg)
+        yield event.plain_result(help_msg)
 
     async def initialize(self):
         logger.info("[ChargeStationPlugin] 插件已初始化")
