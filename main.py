@@ -7,18 +7,6 @@ from astrbot.api.star import Context, Star, register
 from astrbot.api.event import filter, AstrMessageEvent
 
 
-async def _fetch_ports_data(device_ids):
-    """请求接口获取端口数据"""
-    url = f"https://lwstools.xyz/api/charge_station/ports?device_ids={','.join(device_ids)}"
-    try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url) as resp:
-                return await resp.json()
-    except Exception as e:
-        logger.error(f"[ChargeStationPlugin] 请求接口失败: {e}")
-        return None
-
-
 @register("astrbot_plugin_charge_status", "YL1EYE", "查询cumt充电桩端口状态", "1.0.3")
 class ChargeStationPlugin(Star):
     def __init__(self, context: Context):
@@ -83,7 +71,7 @@ class ChargeStationPlugin(Star):
                     lines.append(f"    {name_padded} ({device_id}){ports_info}")
         return "\n".join(lines)
 
-    @filter.command("电桩", aliases=["charge"])
+    @filter.command("charge")
     async def query_charge(self, event: AstrMessageEvent):
         """指令：/电桩 [校区] [区域]"""
         text = event.get_message_str().strip()
@@ -113,7 +101,7 @@ class ChargeStationPlugin(Star):
             event.plain_result("未找到设备，请检查校区或区域名称")
             return
 
-        data = await _fetch_ports_data(device_ids)
+        data = await self._fetch_ports_data(device_ids)
         if not data:
             event.plain_result("获取充电桩信息失败")
             return
@@ -187,3 +175,14 @@ class ChargeStationPlugin(Star):
 
     async def terminate(self):
         logger.info("[ChargeStationPlugin] 插件已卸载")
+
+    async def _fetch_ports_data(device_ids):
+        """请求接口获取端口数据"""
+        url = f"https://lwstools.xyz/api/charge_station/ports?device_ids={','.join(device_ids)}"
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url) as resp:
+                    return await resp.json()
+        except Exception as e:
+            logger.error(f"[ChargeStationPlugin] 请求接口失败: {e}")
+            return None
