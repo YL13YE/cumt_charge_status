@@ -71,6 +71,13 @@ class ChargeStationPlugin(Star):
                     lines.append(f"    {name_padded} ({device_id}){ports_info}")
         return "\n".join(lines)
 
+    @filter.command("helloworld")  # from astrbot.api.event.filter import command
+    async def helloworld(self, event: AstrMessageEvent):
+        '''这是 hello world 指令'''
+        user_name = event.get_sender_name()
+        message_str = event.message_str  # 获取消息的纯文本内容
+        yield event.plain_result(f"Hello, {user_name}!")
+
     @filter.command("charge")
     async def query_charge(self, event: AstrMessageEvent):
         """指令：/电桩 [校区] [区域]"""
@@ -176,7 +183,7 @@ class ChargeStationPlugin(Star):
     async def terminate(self):
         logger.info("[ChargeStationPlugin] 插件已卸载")
 
-    async def _fetch_ports_data(device_ids):
+    async def _fetch_ports_data(self, device_ids):
         """请求接口获取端口数据"""
         url = f"https://lwstools.xyz/api/charge_station/ports?device_ids={','.join(device_ids)}"
         try:
