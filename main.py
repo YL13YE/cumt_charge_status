@@ -114,13 +114,13 @@ class ChargeStationPlugin(Star):
 
         await event.reply(reply)
 
-    @filter.sub_command("电桩", "refresh", aliases=["刷新"])
+    @filter.command("charge_refresh")
     async def refresh_cache(self, event: AstrMessageEvent):
         """强制刷新缓存，获取最新信息"""
         self.cache.clear()
         await event.reply("✅ 缓存已清空，下次查询将强制获取最新数据")
 
-    @filter.sub_command("电桩", "list", aliases=["区域"])
+    @filter.command("charge_list")
     async def list_areas(self, event: AstrMessageEvent):
         """列出校区或指定校区的所有区域"""
         text = event.get_message_str().strip()
@@ -151,7 +151,7 @@ class ChargeStationPlugin(Star):
         reply = f"📍 校区「{campus}」的区域列表：\n" + "\n".join(area_stats)
         await event.reply(reply)
 
-    @filter.sub_command("电桩", "help", aliases=["帮助"])
+    @filter.command("charge_help")
     async def charge_help(self, event: AstrMessageEvent):
         """显示电桩指令帮助信息"""
         help_msg = (
@@ -159,9 +159,9 @@ class ChargeStationPlugin(Star):
             "/电桩                  显示所有校区所有端口\n"
             "/电桩 <校区>            显示指定校区所有端口\n"
             "/电桩 <校区> <区域>      显示指定校区指定区域端口\n"
-            "/电桩 list <校区>       显示指定校区区域列表\n"
-            "/电桩 refresh          强制清空缓存，下次查询获取最新数据\n"
-            "/电桩 help             显示帮助信息\n"
+            "/charge_list      显示指定校区区域列表\n"
+            "/charge_refresh          强制清空缓存，下次查询获取最新数据\n"
+            "/charge_help             显示帮助信息\n"
         )
         await event.reply(help_msg)
 
