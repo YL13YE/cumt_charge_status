@@ -95,18 +95,18 @@ class ChargeStationPlugin(Star):
 
         return "\n".join(lines)
 
-    async def _fetch_ports_data(self, suids):
-        """根据 suid 列表获取端口数据，并返回 /charge 指令适配格式"""
+    async def _fetch_ports_data(self, device_ids):
+        """根据 device_id 列表获取端口数据，返回适配 /charge 格式"""
         API_URL = "https://api.powerliber.com/client/1/device/detail"
         TOKEN = "token"
 
-        ports_data = {}  # 返回格式：{device_id: [port_info_dict, ...]}
+        ports_data = {}  # {device_id: [port_info_dict,...]}
 
         async with aiohttp.ClientSession() as session:
-            for suid in suids:
+            for device_id in device_ids:
+                suid = self.hash_map.get(device_id, self.DEFAULT_SUID)
                 if suid == self.DEFAULT_SUID:
-                    # SUID 为默认值，直接返回空列表
-                    ports_data[str(suid)] = []
+                    ports_data[str(device_id)] = []
                     continue
 
                 payload = {
@@ -119,35 +119,32 @@ class ChargeStationPlugin(Star):
                     "Content-Type": "application/x-www-form-urlencoded",
                     "User-Agent": "Mozilla/5.0",
                 }
+
                 try:
                     async with session.post(API_URL, data=payload, headers=headers) as resp:
                         data = await resp.json()
                         if data.get("code") != 100000:
-                            logger.warning(f"[ChargeStationPlugin] SUID {suid} 接口返回错误: {data}")
-                            ports_data[str(suid)] = []
+                            ports_data[str(device_id)] = []
                             continue
 
                         device = data.get("data", {}).get("device")
                         if not device:
-                            ports_data[str(suid)] = []
+                            ports_data[str(device_id)] = []
                             continue
 
-                        device_id = str(device.get("id", suid))
                         port_list = json.loads(device.get("port_list", "[]"))
-
-                        ports_data[device_id] = [
+                        ports_data[str(device_id)] = [
                             {
-                                "port_index": p["port_index"],
-                                "charge_status": p["charge_status"],
+                                "port_index": p.get("port_index"),
+                                "charge_status": p.get("charge_status", 0),
                                 "energy": p.get("energy_consumed", 0),
                                 "power": p.get("power", 0)
-                            }
-                            for p in port_list
+                            } for p in port_list
                         ]
 
                 except Exception as e:
                     logger.error(f"[ChargeStationPlugin] 请求 SUID {suid} 接口失败: {e}")
-                    ports_data[str(suid)] = []
+                    ports_data[str(device_id)] = []
 
         return {"code": 100000, "data": ports_data}
         """请求接口获取端口数据 停用
@@ -191,9 +188,7 @@ class ChargeStationPlugin(Star):
             yield event.plain_result("未找到设备，请检查校区或区域名称")
             return
 
-        suids = [self.device_to_suid.get(dev_id, self.DEFAULT_SUID) for dev_id in device_ids]
-
-        data = await self._fetch_ports_data(suids)
+        data = await self._fetch_ports_data(device_ids)
         if not data:
             yield event.plain_result("获取充电桩信息失败")
             return
