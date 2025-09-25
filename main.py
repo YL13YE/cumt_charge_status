@@ -84,7 +84,15 @@ class ChargeStationPlugin(Star):
                         elif dev_ports:
                             port_statuses = []
                             for port in dev_ports:
-                                status = "充电中" if port["charge_status"] == 1 else "空闲"
+                                power = port["power"]
+                                energy = port["energy"]
+                                if port["charge_status"] == 1:
+                                    power = max(100, power)
+                                    times = round(energy/power, 1)
+                                    status = f"约{times}h"
+                                else:
+                                    times = 0
+                                    status = "空闲"
                                 port_statuses.append(f"{port['port_index']}:{status}")
                             ports_info = " | " + ", ".join(port_statuses)
                         else:
