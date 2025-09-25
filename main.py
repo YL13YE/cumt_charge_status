@@ -80,8 +80,8 @@ class ChargeStationPlugin(Star):
                         dev_ports = ports_data.get(str(device_id), [])
                         # 未找到 SUID 或无端口数据
                         if dev_ports == [] and self.hash_map.get(device_id, self.DEFAULT_SUID) == self.DEFAULT_SUID:
-                            ports_info = " | 无可用端口 (未找到 SUID)"
-                        elif dev_ports:
+                            ports_info = " | (未找到 SUID)"
+                        else:
                             port_statuses = []
                             for port in dev_ports:
                                 power = port["power"]
@@ -95,8 +95,6 @@ class ChargeStationPlugin(Star):
                                     status = "空闲"
                                 port_statuses.append(f"{port['port_index']}:{status}")
                             ports_info = " | " + ", ".join(port_statuses)
-                        else:
-                            ports_info = " | 无可用端口"
 
                     name_padded = device_name.ljust(max_len)
                     lines.append(f"    {name_padded} ({device_id}){ports_info}")
