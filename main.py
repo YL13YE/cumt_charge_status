@@ -72,7 +72,7 @@ class ChargeStationPlugin(Star):
             for type_, devices in types.items():
                 if area and type_ != area:
                     continue
-                lines.append(f"  类型：{type_}")
+                lines.append(f"  类型：{type_} 时间仅供参考")
                 max_len = max((len(name) for name in devices.values()), default=0)
                 for device_id, device_name in devices.items():
                     ports_info = ""
@@ -89,15 +89,15 @@ class ChargeStationPlugin(Star):
                                 if port["charge_status"] == 1:
                                     power = max(100, power)
                                     times = round(energy/power, 1)
-                                    status = f"约{times}h"
+                                    status = f"{times}h"
                                 else:
                                     times = 0
                                     status = "空闲"
                                 port_statuses.append(f"{port['port_index']}:{status}")
-                            ports_info = " | " + ", ".join(port_statuses)
+                            ports_info = " | " + " ".join(port_statuses)
 
                     name_padded = device_name.ljust(max_len)
-                    lines.append(f"    {name_padded} ({device_id}){ports_info}")
+                    lines.append(f"    {name_padded} {ports_info}")
 
         return "\n".join(lines)
 
@@ -129,7 +129,7 @@ class ChargeStationPlugin(Star):
                 try:
                     async with session.post(API_URL, data=payload, headers=headers) as resp:
                         data = await resp.json()
-                        if data.get("code") != 100000:
+                        if data.get("code") != 0:
                             ports_data[str(device_id)] = []
                             continue
 
