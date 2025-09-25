@@ -249,6 +249,33 @@ class ChargeStationPlugin(Star):
         reply = f"📍 校区「{campus}」的区域列表：\n" + "\n".join(area_stats)
         yield event.plain_result(reply)
 
+    @filter.command("charge_set")
+    async def set_suid(self, event: AstrMessageEvent):
+        """
+        指令：/charge_set <device_id> <suid>
+        用于将设备ID对应的SUID写入 hash.json 并更新内存缓存
+        """
+        text = event.get_message_str().strip()
+        parts = text.split()
+
+        if len(parts) != 3:
+            yield event.plain_result("⚠️ 用法：/charge_set <device_id> <suid>")
+            return
+
+        device_id, suid = parts[1], parts[2]
+
+        # 更新内存
+        self.hash_map[device_id] = suid
+
+        # 写入 hash.json
+        try:
+            with open(self.hash_path, "w", encoding="utf-8") as f:
+                json.dump(self.hash_map, f, ensure_ascii=False, indent=4)
+            yield event.plain_result(f"✅ 已设置设备 {device_id} 的 SUID 为 {suid} 并写入 hash.json")
+        except Exception as e:
+            logger.error(f"[ChargeStationPlugin] 写入 hash.json 失败: {e}")
+            yield event.plain_result(f"❌ 写入 hash.json 失败: {e}")
+
     @filter.command("charge_help")
     async def charge_help(self, event: AstrMessageEvent):
         """显示电桩指令帮助信息"""
