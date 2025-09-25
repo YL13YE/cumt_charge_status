@@ -60,7 +60,7 @@ class ChargeStationPlugin(Star):
         return list(set(areas))  # 去重
 
     def _format_device_map(self, ports_data=None, campus=None, area=None):
-        """格式化输出设备映射表，显示端口状态，处理未找到 SUID 的情况"""
+        """格式化输出设备映射表，显示端口状态及充电时间，保证多行显示"""
         lines = []
         target_map = self.device_map
 
@@ -74,24 +74,28 @@ class ChargeStationPlugin(Star):
                     continue
                 lines.append(f"  类型：{type_}")
                 max_len = max((len(name) for name in devices.values()), default=0)
+
                 for device_id, device_name in devices.items():
-                    ports_info = ""
-                    if ports_data:
-                        dev_ports = ports_data.get(str(device_id), [])
-                        # 未找到 SUID 或无端口数据
-                        if dev_ports == [] and self.hash_map.get(device_id, self.DEFAULT_SUID) == self.DEFAULT_SUID:
-                            ports_info = " | 无可用端口 (未找到 SUID)"
-                        elif dev_ports:
-                            port_statuses = []
-                            for port in dev_ports:
-                                status = "充电中" if port["charge_status"] == 1 else "空闲"
-                                port_statuses.append(f"{port['port_index']}:{status}")
-                            ports_info = " | " + ", ".join(port_statuses)
-                        else:
-                            ports_info = " | 无可用端口"
+                    dev_ports = ports_data.get(str(device_id), []) if ports_data else []
+                    suid = self.hash_map.get(device_id, self.DEFAULT_SUID)
 
                     name_padded = device_name.ljust(max_len)
-                    lines.append(f"    {name_padded} ({device_id}){ports_info}")
+                    lines.append(f"    {name_padded} ({device_id})")
+
+                    if dev_ports == [] and suid == self.DEFAULT_SUID:
+                        lines.append("      无可用端口 (未找到 SUID)")
+                    elif dev_ports:
+                        for port in dev_ports:
+                            status = "充电中" if port["charge_status"] == 1 else "空闲"
+                            if port["charge_status"] == 1:
+                                power = max(port["power"], 1)
+                                energy = port["energy_consumed"]
+                                used_time = round(energy / power, 1)
+                                lines.append(f"      端口{port['port_index']}: {status} ({used_time}h)")
+                            else:
+                                lines.append(f"      端口{port['port_index']}: {status}")
+                    else:
+                        lines.append("      无可用端口")
 
         return "\n".join(lines)
 
@@ -145,7 +149,7 @@ class ChargeStationPlugin(Star):
                 except Exception as e:
                     logger.error(f"[ChargeStationPlugin] 请求 SUID {suid} 接口失败: {e}")
                     ports_data[str(device_id)] = []
-
+        logger.info(ports_data)
         return {"code": 100000, "data": ports_data}
         """请求接口获取端口数据 停用
         url = f"https://lwstools.xyz/api/charge_station/ports?device_ids={','.join(device_ids)}"
