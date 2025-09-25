@@ -14,6 +14,9 @@ class ChargeStationPlugin(Star):
         self.data_dir = os.path.dirname(__file__)
         self.device_map_path = os.path.join(self.data_dir, "device_map.json")
         self.device_map = self._load_device_map()
+        self.hash_path = os.path.join(self.data_dir, "hash.json")
+        self.hash_map = self._load_hash_map()
+        self.DEFAULT_SUID = "0"
         # 全局缓存 (所有用户共用)
         self.cache = {}
 
@@ -27,6 +30,18 @@ class ChargeStationPlugin(Star):
                 return json.load(f)
         except Exception as e:
             logger.error(f"[ChargeStationPlugin] 读取 device_map.json 失败: {e}")
+            return {}
+
+    def _load_hash_map(self):
+        """从 device_map.json 读取设备映射表"""
+        if not os.path.exists(self.hash_path):
+            logger.warning(f"[ChargeStationPlugin] hash.json 不存在：{self.hash_path}")
+            return {}
+        try:
+            with open(self.hash_path, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception as e:
+            logger.error(f"[ChargeStationPlugin] 读取 hash.json 失败: {e}")
             return {}
 
     def _get_campus_areas(self, campus=None):
@@ -45,7 +60,7 @@ class ChargeStationPlugin(Star):
         return list(set(areas))  # 去重
 
     def _format_device_map(self, ports_data=None, campus=None, area=None):
-        """格式化输出设备映射表，端口数量高亮对齐"""
+        """格式化输出设备映射表，显示端口状态，处理未找到 SUID 的情况"""
         lines = []
         target_map = self.device_map
 
@@ -61,22 +76,90 @@ class ChargeStationPlugin(Star):
                 max_len = max((len(name) for name in devices.values()), default=0)
                 for device_id, device_name in devices.items():
                     ports_info = ""
-                    free_ports_count = 0
                     if ports_data:
                         dev_ports = ports_data.get(str(device_id), [])
-                        free_ports_count = len(dev_ports)
-                        ports_str = ", ".join(str(p) for p in dev_ports) if dev_ports else "无可用端口"
-                        ports_info = f" | 空闲端口({free_ports_count}): {ports_str}"
+                        # 未找到 SUID 或无端口数据
+                        if dev_ports == [] and self.hash_map.get(device_id, self.DEFAULT_SUID) == self.DEFAULT_SUID:
+                            ports_info = " | 无可用端口 (未找到 SUID)"
+                        elif dev_ports:
+                            port_statuses = []
+                            for port in dev_ports:
+                                status = "充电中" if port["charge_status"] == 1 else "空闲"
+                                port_statuses.append(f"{port['port_index']}:{status}")
+                            ports_info = " | " + ", ".join(port_statuses)
+                        else:
+                            ports_info = " | 无可用端口"
+
                     name_padded = device_name.ljust(max_len)
                     lines.append(f"    {name_padded} ({device_id}){ports_info}")
+
         return "\n".join(lines)
 
-    @filter.command("helloworld")  # from astrbot.api.event.filter import command
-    async def helloworld(self, event: AstrMessageEvent):
-        '''这是 hello world 指令'''
-        user_name = event.get_sender_name()
-        message_str = event.message_str  # 获取消息的纯文本内容
-        yield event.plain_result(f"Hello, {user_name}!")
+    async def _fetch_ports_data(self, suids):
+        """根据 suid 列表获取端口数据，并返回 /charge 指令适配格式"""
+        API_URL = "https://api.powerliber.com/client/1/device/detail"
+        TOKEN = "token"
+
+        ports_data = {}  # 返回格式：{device_id: [port_info_dict, ...]}
+
+        async with aiohttp.ClientSession() as session:
+            for suid in suids:
+                if suid == self.DEFAULT_SUID:
+                    # SUID 为默认值，直接返回空列表
+                    ports_data[str(suid)] = []
+                    continue
+
+                payload = {
+                    "token": TOKEN,
+                    "client_id": 1,
+                    "app_id": "dd",
+                    "suid": suid
+                }
+                headers = {
+                    "Content-Type": "application/x-www-form-urlencoded",
+                    "User-Agent": "Mozilla/5.0",
+                }
+                try:
+                    async with session.post(API_URL, data=payload, headers=headers) as resp:
+                        data = await resp.json()
+                        if data.get("code") != 100000:
+                            logger.warning(f"[ChargeStationPlugin] SUID {suid} 接口返回错误: {data}")
+                            ports_data[str(suid)] = []
+                            continue
+
+                        device = data.get("data", {}).get("device")
+                        if not device:
+                            ports_data[str(suid)] = []
+                            continue
+
+                        device_id = str(device.get("id", suid))
+                        port_list = json.loads(device.get("port_list", "[]"))
+
+                        ports_data[device_id] = [
+                            {
+                                "port_index": p["port_index"],
+                                "charge_status": p["charge_status"],
+                                "energy": p.get("energy_consumed", 0),
+                                "power": p.get("power", 0)
+                            }
+                            for p in port_list
+                        ]
+
+                except Exception as e:
+                    logger.error(f"[ChargeStationPlugin] 请求 SUID {suid} 接口失败: {e}")
+                    ports_data[str(suid)] = []
+
+        return {"code": 100000, "data": ports_data}
+        """请求接口获取端口数据 停用
+        url = f"https://lwstools.xyz/api/charge_station/ports?device_ids={','.join(device_ids)}"
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url) as resp:
+                    return await resp.json()
+        except Exception as e:
+            logger.error(f"[ChargeStationPlugin] 请求接口失败: {e}")
+            return None
+        """
 
     @filter.command("charge")
     async def query_charge(self, event: AstrMessageEvent):
@@ -108,7 +191,9 @@ class ChargeStationPlugin(Star):
             yield event.plain_result("未找到设备，请检查校区或区域名称")
             return
 
-        data = await self._fetch_ports_data(device_ids)
+        suids = [self.device_to_suid.get(dev_id, self.DEFAULT_SUID) for dev_id in device_ids]
+
+        data = await self._fetch_ports_data(suids)
         if not data:
             yield event.plain_result("获取充电桩信息失败")
             return
@@ -168,9 +253,9 @@ class ChargeStationPlugin(Star):
         """显示电桩指令帮助信息"""
         help_msg = (
             "充电桩查询指令使用说明：\n"
-            "/电桩                  显示所有校区所有端口\n"
-            "/电桩 <校区>            显示指定校区所有端口\n"
-            "/电桩 <校区> <区域>      显示指定校区指定区域端口\n"
+            "/charge                  显示所有校区所有端口\n"
+            "/charge <校区>            显示指定校区所有端口\n"
+            "/charge <校区> <区域>      显示指定校区指定区域端口\n"
             "/charge_list      显示指定校区区域列表\n"
             "/charge_refresh          强制清空缓存，下次查询获取最新数据\n"
             "/charge_help             显示帮助信息\n"
@@ -183,13 +268,3 @@ class ChargeStationPlugin(Star):
     async def terminate(self):
         logger.info("[ChargeStationPlugin] 插件已卸载")
 
-    async def _fetch_ports_data(self, device_ids):
-        """请求接口获取端口数据"""
-        url = f"https://lwstools.xyz/api/charge_station/ports?device_ids={','.join(device_ids)}"
-        try:
-            async with aiohttp.ClientSession() as session:
-                async with session.get(url) as resp:
-                    return await resp.json()
-        except Exception as e:
-            logger.error(f"[ChargeStationPlugin] 请求接口失败: {e}")
-            return None
