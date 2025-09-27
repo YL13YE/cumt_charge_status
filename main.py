@@ -128,7 +128,7 @@ class ChargeStationPlugin(Star):
 
                     # 设备名对齐输出
                     name_padded = device_name.ljust(max_len)
-                    lines.append(f"    {name_padded} ({device_id})")
+                    lines.append(f"    {name_padded} ")
                     if ports_info:
                         # ports_info 可能包含多行，所以直接添加（已经包含缩进）
                         for pline in ports_info.splitlines():
