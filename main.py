@@ -64,42 +64,52 @@ class ChargeStationPlugin(Star):
         lines = []
         target_map = self.device_map
 
+        # 如果指定校区，只取该校区
         if campus:
             target_map = {campus: self.device_map.get(campus, {})}
 
-        for region, types in target_map.items():
-            lines.append(f"区域：{region}")
-            for type_, devices in types.items():
+        for campus_name, regions in target_map.items():
+            # 校区标题 + 粗分隔线
+            lines.append(f"校区：{campus_name}")
+            lines.append("━━━━━━━━━━━━━━━━━━━━")
+
+            for type_, devices in regions.items():
                 if area and type_ != area:
                     continue
-                lines.append(f"  类型：{type_} 时间仅供参考")
+
+                # 区域标题 + 细分隔线
+                lines.append(f"  区域：{type_} （时间仅供参考）")
+                lines.append("  ───────────────")
+
                 max_len = max((len(name) for name in devices.values()), default=0)
+
                 for device_id, device_name in devices.items():
                     ports_info = ""
                     if ports_data:
                         dev_ports = ports_data.get(str(device_id), [])
-                        # 未找到 SUID 或无端口数据
+                        # 未找到 SUID
                         if dev_ports == [] and self.hash_map.get(device_id, self.DEFAULT_SUID) == self.DEFAULT_SUID:
-                            ports_info = " |\n 提供使用记录截图以补充信息"
+                            ports_info = "⚠ 提供使用记录补充此数据"
                         else:
                             port_statuses = []
                             for port in dev_ports:
-                                power = port["power"]
-                                energy = port["energy"]
-                                time_consumed = port["time_consumed"]
                                 if port["charge_status"] == 1:
-                                    power = max(100, power)
-                                    times = round(time_consumed/60, 1)
-                                    status = f"{times}h"
+                                    # 充电中 → 显示使用时间
+                                    energy = port.get("energy_consumed", 0)
+                                    power = max(port.get("power", 0), 1)
+                                    hours = round(energy / power, 1)
+                                    port_statuses.append(f"{port['port_index']}:{hours}h")
                                 else:
-                                    times = 0
-                                    status = "空闲"
-                                port_statuses.append(f"{port['port_index']+1}: {status}")
-                            ports_info = " | " + " ".join(port_statuses)
+                                    port_statuses.append(f"{port['port_index']}:空闲")
+                            ports_info = "  " + "  ".join(port_statuses)
 
+                    # 对齐设备名，换行缩进
                     name_padded = device_name.ljust(max_len)
-                    lines.append(f"    {name_padded} {ports_info}")
-
+                    lines.append(f"    {name_padded} ({device_id})")
+                    if ports_info:
+                        lines.append(f"      {ports_info}")
+                # 区域之间增加空行，避免挤在一起
+                lines.append("")
         return "\n".join(lines)
 
     async def _fetch_ports_data(self, device_ids):
