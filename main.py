@@ -17,6 +17,8 @@ class ChargeStationPlugin(Star):
         self.hash_path = os.path.join(self.data_dir, "hash.json")
         self.hash_map = self._load_hash_map()
         self.DEFAULT_SUID = "0"
+        self.API_URL = "https://api.powerliber.com/client/1/device/detail"
+        self.TOKEN = "token"
         # 全局缓存 (所有用户共用)
         self.cache = {}
 
@@ -106,7 +108,7 @@ class ChargeStationPlugin(Star):
                                 if p.get("charge_status") == 1:
                                     time_consumed = p.get("time_consumed", 0)
                                     # 充电中用 ⚡ 标识，时间紧随其后
-                                    entry = f"{label}⚡{time_consumed}h"
+                                    entry = f"{label} {round(time_consumed/60,1)}h"
                                 else:
                                     entry = f"{label} 空闲"
                                 entries.append(entry)
@@ -114,16 +116,13 @@ class ChargeStationPlugin(Star):
                             if not entries:
                                 ports_info = "⚠ 无端口数据"
                             else:
-                                # 每列固定宽度，保证列对齐（计算当前设备最长 entry）
-                                col_width = max(len(e) for e in entries) + 2  # +2 空格缓冲
                                 # 每行显示 4 列
                                 cols_per_row = 4
                                 row_lines = []
                                 for i in range(0, len(entries), cols_per_row):
                                     chunk = entries[i:i + cols_per_row]
-                                    # 用两个空格分隔列，并对每列做 ljust 对齐
-                                    row = "  ".join(e.ljust(col_width) for e in chunk)
-                                    # 行前缩进（和你原来保持一致级别）
+                                    row = "".join(chunk)
+                                    # 行前缩进（保持和原来一致）
                                     row_lines.append("      " + row)
                                 ports_info = "\n".join(row_lines)
 
@@ -140,8 +139,8 @@ class ChargeStationPlugin(Star):
 
     async def _fetch_ports_data(self, device_ids):
         """根据 device_id 列表获取端口数据，返回适配 /charge 格式"""
-        API_URL = "https://api.powerliber.com/client/1/device/detail"
-        TOKEN = "token"
+        API_URL = self.API_URL
+        TOKEN = self.TOKEN
 
         ports_data = {}  # {device_id: [port_info_dict,...]}
 
@@ -313,6 +312,35 @@ class ChargeStationPlugin(Star):
         except Exception as e:
             logger.error(f"[ChargeStationPlugin] 写入 hash.json 失败: {e}")
             yield event.plain_result(f"❌ 写入 hash.json 失败: {e}")
+
+    @filter.command("get_device")
+    async def get_device(self, event: AstrMessageEvent):
+
+        text = event.get_message_str().strip()
+        parts = text.split()
+
+        if len(parts) != 2:
+            yield event.plain_result("⚠️ 用法：/get_device  <suid>")
+            return
+        SUID = parts[1]
+        API_URL = self.API_URL
+        TOKEN = self.TOKEN
+        async with aiohttp.ClientSession() as session:
+            payload = {
+                "token": TOKEN,
+                "client_id": 1,
+                "app_id": "dd",
+                "suid": SUID
+            }
+            headers = {
+                "Content-Type": "application/x-www-form-urlencoded",
+                "User-Agent": "Mozilla/5.0",
+            }
+            async with session.post(API_URL, data=payload, headers=headers) as resp:
+                data = await resp.json()
+                device = data["data"]["device"]
+                yield event.plain_result(f"设备ID: {device['id']} 位置:{device['station_name']}(端口数: {device['port_count']})")
+
 
     @filter.command("charge_help")
     async def charge_help(self, event: AstrMessageEvent):
