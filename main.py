@@ -60,16 +60,18 @@ class ChargeStationPlugin(Star):
         return list(set(areas))  # 去重
 
     def _format_device_map(self, ports_data=None, campus=None, area=None):
-        """格式化输出设备映射表，显示端口状态，处理未找到 SUID 的情况"""
+        """格式化输出设备映射表，显示端口状态，处理未找到 SUID 的情况
+        - 每行最多 4 个端口
+        - 端口号用方括号突出显示，例如 [0]
+        - 充电中显示为 ⚡{hours}h，空闲显示为 空闲
+        """
         lines = []
         target_map = self.device_map
 
-        # 如果指定校区，只取该校区
         if campus:
             target_map = {campus: self.device_map.get(campus, {})}
 
         for campus_name, regions in target_map.items():
-            # 校区标题 + 粗分隔线
             lines.append(f"校区：{campus_name}")
             lines.append("━━━━━━━━━━━━━━━━━━━━")
 
@@ -77,9 +79,7 @@ class ChargeStationPlugin(Star):
                 if area and type_ != area:
                     continue
 
-                # 区域标题 + 细分隔线
                 lines.append(f"  区域：{type_} （时间仅供参考）")
-                lines.append("  ───────────────")
 
                 max_len = max((len(name) for name in devices.values()), default=0)
 
@@ -91,24 +91,50 @@ class ChargeStationPlugin(Star):
                         if dev_ports == [] and self.hash_map.get(device_id, self.DEFAULT_SUID) == self.DEFAULT_SUID:
                             ports_info = "⚠ 提供使用记录补充此数据"
                         else:
-                            port_statuses = []
-                            for port in dev_ports:
-                                if port["charge_status"] == 1:
-                                    # 充电中 → 显示使用时间
-                                    energy = port.get("energy_consumed", 0)
-                                    power = max(port.get("power", 0), 1)
-                                    hours = round(energy / power, 1)
-                                    port_statuses.append(f"{port['port_index']}:{hours}h")
-                                else:
-                                    port_statuses.append(f"{port['port_index']}:空闲")
-                            ports_info = "  " + "  ".join(port_statuses)
+                            # 按端口索引排序，保证显示顺序稳定
+                            dev_ports_sorted = sorted(dev_ports, key=lambda p: p.get("port_index", 0))
 
-                    # 对齐设备名，换行缩进
+                            # 计算端口索引位数，保证对齐（例如 0 -> " 0", 10 -> "10"）
+                            max_idx_digits = max((len(str(p.get("port_index", 0))) for p in dev_ports_sorted),
+                                                 default=1)
+
+                            # 生成每个端口的短字符串，端口号突出放在方括号内
+                            entries = []
+                            for p in dev_ports_sorted:
+                                idx = p.get("port_index", 0)+1
+                                label = f"[{idx:>{max_idx_digits}}]"  # 右对齐端口数字
+                                if p.get("charge_status") == 1:
+                                    time_consumed = p.get("time_consumed", 0)
+                                    # 充电中用 ⚡ 标识，时间紧随其后
+                                    entry = f"{label}⚡{time_consumed}h"
+                                else:
+                                    entry = f"{label} 空闲"
+                                entries.append(entry)
+
+                            if not entries:
+                                ports_info = "⚠ 无端口数据"
+                            else:
+                                # 每列固定宽度，保证列对齐（计算当前设备最长 entry）
+                                col_width = max(len(e) for e in entries) + 2  # +2 空格缓冲
+                                # 每行显示 4 列
+                                cols_per_row = 4
+                                row_lines = []
+                                for i in range(0, len(entries), cols_per_row):
+                                    chunk = entries[i:i + cols_per_row]
+                                    # 用两个空格分隔列，并对每列做 ljust 对齐
+                                    row = "  ".join(e.ljust(col_width) for e in chunk)
+                                    # 行前缩进（和你原来保持一致级别）
+                                    row_lines.append("      " + row)
+                                ports_info = "\n".join(row_lines)
+
+                    # 设备名对齐输出
                     name_padded = device_name.ljust(max_len)
                     lines.append(f"    {name_padded} ({device_id})")
                     if ports_info:
-                        lines.append(f"      {ports_info}")
-                # 区域之间增加空行，避免挤在一起
+                        # ports_info 可能包含多行，所以直接添加（已经包含缩进）
+                        for pline in ports_info.splitlines():
+                            lines.append(pline)
+                # 区域之间空行
                 lines.append("")
         return "\n".join(lines)
 
