@@ -295,12 +295,16 @@ class ChargeStationPlugin(Star):
         text = event.get_message_str().strip()
         parts = text.split()
 
-        if len(parts) != 3:
-            yield event.plain_result("⚠️ 用法：/charge_set <device_id> <suid>")
+        if len(parts) != 2:
+            yield event.plain_result("⚠️ 用法：/charge_set <suid>")
             return
-
-        device_id, suid = parts[1], parts[2]
-
+        suid = parts[1]
+        try:
+            message, device_id = self.get_device(suid)
+        except Exception as e:
+            yield event.plain_result(f"请求失败: {e}")
+            return
+        yield event.plain_result(message)
         # 更新内存
         self.hash_map[device_id] = suid
 
@@ -313,16 +317,8 @@ class ChargeStationPlugin(Star):
             logger.error(f"[ChargeStationPlugin] 写入 hash.json 失败: {e}")
             yield event.plain_result(f"❌ 写入 hash.json 失败: {e}")
 
-    @filter.command("get_device")
-    async def get_device(self, event: AstrMessageEvent):
-
-        text = event.get_message_str().strip()
-        parts = text.split()
-
-        if len(parts) != 2:
-            yield event.plain_result("⚠️ 用法：/get_device  <suid>")
-            return
-        SUID = parts[1]
+    async def get_device(self, SUID):
+        SUID = SUID
         API_URL = self.API_URL
         TOKEN = self.TOKEN
         async with aiohttp.ClientSession() as session:
@@ -339,8 +335,8 @@ class ChargeStationPlugin(Star):
             async with session.post(API_URL, data=payload, headers=headers) as resp:
                 data = await resp.json()
                 device = data["data"]["device"]
-                yield event.plain_result(f"设备ID: {device['id']} 位置:{device['station_name']}(端口数: {device['port_count']})")
-
+                result = f"设备ID: {device['id']} 位置:{device['station_name']}(端口数: {device['port_count']})"
+        return result, device['id']
 
     @filter.command("charge_help")
     async def charge_help(self, event: AstrMessageEvent):
