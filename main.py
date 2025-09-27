@@ -80,20 +80,21 @@ class ChargeStationPlugin(Star):
                         dev_ports = ports_data.get(str(device_id), [])
                         # 未找到 SUID 或无端口数据
                         if dev_ports == [] and self.hash_map.get(device_id, self.DEFAULT_SUID) == self.DEFAULT_SUID:
-                            ports_info = " | (未找到 SUID)"
+                            ports_info = " |\n 提供使用记录截图以补充信息"
                         else:
                             port_statuses = []
                             for port in dev_ports:
                                 power = port["power"]
                                 energy = port["energy"]
+                                time_consumed = port["time_consumed"]
                                 if port["charge_status"] == 1:
                                     power = max(100, power)
-                                    times = round(energy/power, 1)
+                                    times = round(time_consumed/60, 1)
                                     status = f"{times}h"
                                 else:
                                     times = 0
                                     status = "空闲"
-                                port_statuses.append(f"{port['port_index']}:{status}")
+                                port_statuses.append(f"{port['port_index']+1}: {status}")
                             ports_info = " | " + " ".join(port_statuses)
 
                     name_padded = device_name.ljust(max_len)
@@ -144,7 +145,8 @@ class ChargeStationPlugin(Star):
                                 "port_index": p.get("port_index"),
                                 "charge_status": p.get("charge_status", 0),
                                 "energy": p.get("energy_consumed", 0),
-                                "power": p.get("power", 0)
+                                "power": p.get("power", 0),
+                                "time_consumed": p.get("time_consumed", 0)
                             } for p in port_list
                         ]
 
@@ -173,7 +175,7 @@ class ChargeStationPlugin(Star):
         area = parts[2] if len(parts) > 2 else None
 
         # 缓存 key
-        cache_key = (campus or "all", area or "all")
+        cache_key = (campus if campus else None, area if area else None)
         now = time.time()
         cache_entry = self.cache.get(cache_key)
 
