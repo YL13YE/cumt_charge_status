@@ -246,6 +246,45 @@ class ChargeStationPlugin(Star):
 
         yield event.plain_result(reply)
 
+    @filter.regex(r"^(东门|学院|矿科|兰|桃|松|竹|生活)$")
+    async def query_charge_area(self, event: AstrMessageEvent):
+        """只输入区域名时直接查询南湖校区"""
+        area = event.get_message_str().strip()
+        # 缓存 key
+        cache_key = ("南湖", area)
+        now = time.time()
+        cache_entry = self.cache.get(cache_key)
+        if cache_entry and now - cache_entry["time"] < 90:
+            yield event.plain_result(f"(缓存数据，{int(now - cache_entry['time'])}秒前更新)\n{cache_entry['reply']}")
+            return
+
+        # 查找 device_ids
+        device_ids = []
+        campus_data = self.device_map.get("南湖", {})
+        for a_name, devices in campus_data.items():
+            if area in a_name:  # 模糊匹配区域名
+                device_ids.extend(devices.keys())
+
+        if not device_ids:
+            yield event.plain_result(f"未找到南湖校区的「{area}」相关设备")
+            return
+
+        data = await self._fetch_ports_data(device_ids)
+        if not data:
+            yield event.plain_result("获取充电桩信息失败")
+            return
+        if data.get("code") != 100000:
+            yield event.plain_result("接口返回错误")
+            return
+
+        ports_data = data.get("data", {})
+        reply = self._format_device_map(ports_data=ports_data, campus="南湖", area=area)
+
+        # 更新缓存
+        self.cache[cache_key] = {"time": now, "ports_data": ports_data, "reply": reply}
+
+        yield event.plain_result(reply)
+
     @filter.command("charge_refresh")
     async def refresh_cache(self, event: AstrMessageEvent):
         """强制刷新缓存，获取最新信息"""
