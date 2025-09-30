@@ -75,7 +75,6 @@ class ChargeStationPlugin(Star):
 
         for campus_name, regions in target_map.items():
             lines.append(f"校区：{campus_name}")
-            lines.append("━━━━━━━━━━━━━━━━━━━━")
 
             for type_, devices in regions.items():
                 if area and type_ != area:
@@ -300,7 +299,7 @@ class ChargeStationPlugin(Star):
             return
         suid = parts[1]
         try:
-            message, device_id = self.get_device(suid)
+            message, device_id = await self.get_device(suid)
         except Exception as e:
             yield event.plain_result(f"请求失败: {e}")
             return
