@@ -122,12 +122,12 @@ class ChargeStationPlugin(Star):
                                     chunk = entries[i:i + cols_per_row]
                                     row = "".join(chunk)
                                     # 行前缩进（保持和原来一致）
-                                    row_lines.append("      " + row)
+                                    row_lines.append(row)
                                 ports_info = "\n".join(row_lines)
 
                     # 设备名对齐输出
                     name_padded = device_name.ljust(max_len)
-                    lines.append(f"    {name_padded} ")
+                    lines.append(f"-----------{name_padded}-----------")
                     if ports_info:
                         # ports_info 可能包含多行，所以直接添加（已经包含缩进）
                         for pline in ports_info.splitlines():
