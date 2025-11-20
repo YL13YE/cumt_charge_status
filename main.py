@@ -2,6 +2,7 @@ import json
 import os
 import aiohttp
 import time
+import unicodedata
 from astrbot.api import logger
 from astrbot.api.star import Context, Star, register
 from astrbot.api.event import filter, AstrMessageEvent
@@ -126,8 +127,19 @@ class ChargeStationPlugin(Star):
                                 ports_info = "\n".join(row_lines)
 
                     # 设备名对齐输出
-                    name_padded = device_name.ljust(max_len)
-                    lines.append(f"-----------{name_padded}-----------")
+                    total_width = 32
+                    text_w = 0
+                    for ch in device_name:
+                        if unicodedata.east_asian_width(ch) in ("F", "W"):
+                            text_w += 2
+                        else:
+                            text_w += 1
+                    pad = max(total_width - text_w, 0)
+                    left = pad // 2
+                    right = pad - left
+                    centered_name = "-" * left + device_name + "-" * right
+                    lines.append(centered_name)
+
                     if ports_info:
                         # ports_info 可能包含多行，所以直接添加（已经包含缩进）
                         for pline in ports_info.splitlines():
@@ -212,8 +224,10 @@ class ChargeStationPlugin(Star):
         cache_key = (campus if campus else None, area if area else None)
         now = time.time()
         cache_entry = self.cache.get(cache_key)
+        if cache_entry:
+            logger.info(f"[DEBUG] now={now}, cache_time={cache_entry['time']}, diff={now - cache_entry['time']}")
 
-        if cache_entry and now - cache_entry["time"] < 60:
+        if cache_entry and now - cache_entry["time"] < 90:
             yield event.plain_result(f"(缓存数据，{int(now - cache_entry['time'])}秒前更新)\n{cache_entry['reply']}")
             return
 
@@ -240,7 +254,7 @@ class ChargeStationPlugin(Star):
 
         ports_data = data.get("data", {})
         reply = self._format_device_map(ports_data=ports_data, campus=campus, area=area)
-
+        
         # 更新缓存
         self.cache[cache_key] = {"time": now, "ports_data": ports_data, "reply": reply}
 
@@ -254,7 +268,7 @@ class ChargeStationPlugin(Star):
         cache_key = ("南湖", area)
         now = time.time()
         cache_entry = self.cache.get(cache_key)
-        if cache_entry and now - cache_entry["time"] < 90:
+        if cache_entry and now - cache_entry["time"] < 60:
             yield event.plain_result(f"(缓存数据，{int(now - cache_entry['time'])}秒前更新)\n{cache_entry['reply']}")
             return
 
@@ -279,7 +293,6 @@ class ChargeStationPlugin(Star):
 
         ports_data = data.get("data", {})
         reply = self._format_device_map(ports_data=ports_data, campus="南湖", area=area)
-
         # 更新缓存
         self.cache[cache_key] = {"time": now, "ports_data": ports_data, "reply": reply}
 
@@ -351,6 +364,7 @@ class ChargeStationPlugin(Star):
             with open(self.hash_path, "w", encoding="utf-8") as f:
                 json.dump(self.hash_map, f, ensure_ascii=False, indent=4)
             yield event.plain_result(f"✅ 已设置设备 {device_id} 的 SUID 为 {suid} 并写入 hash.json")
+            self.hash_map = self._load_hash_map()
         except Exception as e:
             logger.error(f"[ChargeStationPlugin] 写入 hash.json 失败: {e}")
             yield event.plain_result(f"❌ 写入 hash.json 失败: {e}")
