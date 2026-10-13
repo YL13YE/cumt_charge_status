@@ -7,7 +7,7 @@
   },
   "use_image": {
     "description": "查询结果渲染为图片输出",
-    "type": "boolean",
+    "type": "bool",
     "default": true,
     "hint": "开启后 /charge 结果以图片卡片输出，避免长文本换行错乱；渲染失败或关闭时自动降级为文字"
   },
