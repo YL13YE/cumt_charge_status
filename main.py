@@ -6,7 +6,12 @@ import unicodedata
 from astrbot.api import logger
 from astrbot.api.star import Context, Star, register
 from astrbot.api.event import filter, AstrMessageEvent
-
+from astrbot.core.message.components import Location,Plain,Json,Image
+from astrbot.core.message.message_event_result import MessageChain
+import astrbot.api.message_components as Comp
+from astrbot.core.platform.sources.aiocqhttp.aiocqhttp_message_event import (
+    AiocqhttpMessageEvent,
+)
 
 @register("astrbot_plugin_charge_status", "YL1EYE", "查询cumt充电桩端口状态", "1.0.3")
 class ChargeStationPlugin(Star):
@@ -297,6 +302,32 @@ class ChargeStationPlugin(Star):
         self.cache[cache_key] = {"time": now, "ports_data": ports_data, "reply": reply}
 
         yield event.plain_result(reply)
+
+
+    @filter.command("whereis")
+    async def get_location(self, event: AstrMessageEvent):
+        # 经纬度
+        lat, lon = "31.2304", "121.4737"
+        title = "测试地址"
+        content = "上海市 · 人民广场（测试）"
+        client = event.bot
+        is_private = event.is_private_chat()
+        # 构造 CQ 码位置消息
+        cq_location = f"[CQ:location,lat={lat},lon={lon},title={title},content={content}]"
+
+        payloads = {
+            "message": cq_location
+        }
+
+        if is_private:
+            payloads["user_id"] = event.get_sender_id()
+            await client.api.call_action("send_private_msg", **payloads)
+        else:
+            payloads["group_id"] = event.get_group_id()
+            await client.api.call_action("send_group_msg", **payloads)
+
+
+
 
     @filter.command("charge_refresh")
     async def refresh_cache(self, event: AstrMessageEvent):
